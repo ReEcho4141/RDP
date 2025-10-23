@@ -1,0 +1,62 @@
+name: desktop
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9999
+
+    steps:
+    - name: Set up job
+      run: echo "Starting Tailscale RDP session..."
+
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup display and install packages
+      run: |
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          xfce4 xfce4-terminal dbus-x11 x11vnc xvfb \
+          tigervnc-standalone-server wget unzip python3-pip curl gnupg
+
+        # Tambahkan repo Tailscale
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg > /dev/null
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list > /dev/null
+
+        sudo apt-get update
+        sudo apt-get install -y tailscale
+
+    - name: Configure VNC password
+      run: |
+        mkdir -p ~/.vnc
+        echo "$VNC_PASSWORD" | vncpasswd -f > ~/.vnc/passwd
+        chmod 600 ~/.vnc/passwd
+
+    - name: Start Xvfb and XFCE
+      run: |
+        export DISPLAY=:0
+        Xvfb :0 -screen 0 1280x720x16 &
+        sleep 3
+        startxfce4 &
+
+    - name: Start x11vnc (serve VNC on :5901)
+      run: |
+        x11vnc -display :0 -rfbauth ~/.vnc/passwd -forever -shared -rfbport 5901 &
+
+    - name: Install and start Tailscale
+      run: |
+        sudo tailscaled &
+        sleep 5
+        sudo tailscale up --authkey $TAILSCALE_AUTHKEY --hostname github-rdp --accept-routes
+
+    - name: Show connection info
+      run: |
+        echo "✅ Tailscale node ready!"
+        tailscale ip -4
+        echo "Use any VNC viewer to connect to this IP on port 5901"
+
+    - name: Keep job alive
+      run: sleep 9999999
