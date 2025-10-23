@@ -1,0 +1,54 @@
+name: RDP via Tailscale
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9999
+
+    steps:
+    - name: Set up job
+      run: echo "🚀 Starting Ubuntu RDP session with Tailscale..."
+
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Install Desktop Environment and XRDP
+      run: |
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          xfce4 xfce4-terminal xrdp dbus-x11 curl gnupg
+        sudo systemctl enable xrdp
+        echo xfce4-session > ~/.xsession
+
+    - name: Install and Configure Tailscale
+      run: |
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg > /dev/null
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y tailscale
+        sudo systemctl enable tailscaled
+        sudo systemctl start tailscaled
+        sleep 5
+        sudo tailscale up --authkey $TAILSCALE_AUTHKEY --hostname github-rdp --accept-routes
+
+    - name: Set up RDP user
+      run: |
+        sudo adduser --disabled-password --gecos "" runner
+        echo "runner:123456" | sudo chpasswd
+        sudo usermod -aG sudo runner
+        echo "✅ User created: runner / 123456"
+
+    - name: Show connection info
+      run: |
+        echo "✅ RDP ready via Tailscale!"
+        tailscale ip -4
+        echo "Use Remote Desktop to connect:"
+        echo "Address: (Tailscale IP):3389"
+        echo "Username: runner"
+        echo "Password: 123456"
+
+    - name: Keep job alive
+      run: sleep 9999999
