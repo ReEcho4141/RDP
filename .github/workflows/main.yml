@@ -1,0 +1,57 @@
+name: RDP via Tailscale + XFCE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9999
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Install dependencies & Tailscale
+      run: |
+        sudo apt update
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-goodies xrdp curl unzip dbus-x11 x11-xserver-utils
+
+        # Setup Tailscale
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg > /dev/null
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list > /dev/null
+        sudo apt update
+        sudo apt install -y tailscale
+
+    - name: Start Tailscale daemon
+      run: |
+        sudo tailscaled &
+
+    - name: Authenticate Tailscale
+      run: |
+        sudo tailscale up --authkey ${{ secrets.TAILSCALE_AUTHKEY }} --hostname github-rdp --accept-routes
+
+    - name: Setup RDP user and XFCE
+      run: |
+        sudo adduser rdpuser --gecos "" --disabled-password
+        echo 'rdpuser:rdppassword' | sudo chpasswd
+        sudo adduser rdpuser sudo
+
+        echo xfce4-session | sudo tee /home/rdpuser/.xsession
+        sudo chmod 755 /home/rdpuser/.xsession
+        sudo chown rdpuser:rdpuser /home/rdpuser/.xsession
+
+        sudo systemctl enable xrdp
+        sudo systemctl restart xrdp
+
+    - name: Show connection info
+      run: |
+        echo "✅ RDP Server Siap!"
+        echo "User: rdpuser"
+        echo "Password: rdppassword"
+        echo "Gunakan IP berikut di Tailscale:"
+        tailscale ip -4
+        echo "Login lewat RDP (misalnya di Windows: Remote Desktop Connection atau di Android: Microsoft Remote Desktop)."
+
+    - name: Keep alive
+      run: sleep 9999999
