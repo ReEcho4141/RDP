@@ -1,0 +1,36 @@
+name: RDP Free Tailscale
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo systemctl enable --now tailscaled
+
+      - name: Connect to Tailscale
+        run: |
+          sudo tailscale up --authkey ${{ secrets.TAILSCALE_AUTHKEY }} --hostname github-rdp --accept-routes
+
+      - name: Setup RDP and XFCE
+        run: |
+          sudo apt update
+          sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp xfce4 xfce4-goodies dbus-x11 x11-xserver-utils
+          sudo adduser rdpuser --gecos "" --disabled-password
+          echo 'rdpuser:rdppassword' | sudo chpasswd
+          sudo adduser rdpuser sudo
+          echo xfce4-session > ~/.xsession
+          echo xfce4-session > /home/rdpuser/.xsession
+          sudo systemctl enable xrdp
+          sudo systemctl restart xrdp
+
+      - name: Show connection info
+        run: |
+          tailscale ip -4
